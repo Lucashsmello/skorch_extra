@@ -101,12 +101,12 @@ class TensorBoardEmbeddingCallback(TensorBoardCallbackBase):
         X_emb = net.transform(X)
         self.writer.add_embedding(tag=self.foldtag+"/metric_space/train", mat=X_emb, metadata=y)
 
-        if(net.validation_dataset is not None):  # FIXME: use net.get_split_datasets
-            y_val = net.validation_dataset.y
-            if(self.labels_name is not None):
-                y_val = [self.labels_name[a] for a in y_val]
-            X_emb = net.transform(net.validation_dataset.X)
-            self.writer.add_embedding(tag=self.foldtag+"/metric_space/valid", mat=X_emb, metadata=y_val)
+        # if(net.validation_dataset is not None):  # FIXME: use net.get_split_datasets
+        #     y_val = net.validation_dataset.y
+        #     if(self.labels_name is not None):
+        #         y_val = [self.labels_name[a] for a in y_val]
+        #     X_emb = net.transform(net.validation_dataset.X)
+        #     self.writer.add_embedding(tag=self.foldtag+"/metric_space/valid", mat=X_emb, metadata=y_val)
         super().on_train_end(net, X=X, y=y, **kwargs)
 
 
