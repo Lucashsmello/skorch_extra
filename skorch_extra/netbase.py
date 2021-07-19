@@ -88,6 +88,26 @@ class NeuralNetBase(NeuralNet):
         fname = m.hexdigest()
         return f"{self.cache_dir}/{fname}.pkl"
 
+    def get_loss(self, y_pred, y_true, X=None, training=False):
+        y_true = skorch.utils.to_tensor(y_true, device=self.device)
+
+        if isinstance(self.criterion_, torch.nn.Module):
+            self.criterion_.train(training)
+
+        loss = self.criterion_(y_pred, y_true)
+        if(isinstance(loss, dict)):
+            loss_dict = loss
+            assert('loss' in loss_dict)
+            for k, v in loss_dict.items():
+                if(isinstance(v, dict)):
+                    v = v['losses']
+                if(k == 'loss'):
+                    loss = v
+                else:
+                    name = "%s_%s" % ("train" if training else "valid", k)
+                    self.history.record_batch(name, v.item())
+        return loss
+
 
 class NeuralNetTransformer(NeuralNetBase, TransformerMixin):
     def transform(self, X):
