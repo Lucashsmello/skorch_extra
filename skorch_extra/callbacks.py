@@ -1,3 +1,5 @@
+from typing import Tuple
+from sklearn import metrics
 from skorch import callbacks
 import os
 from pathlib import Path
@@ -154,3 +156,40 @@ class ExtendedEpochScoring(callbacks.EpochScoring):
         history.record(self.name_ + '_best', bool(is_best))
         if is_best:
             self.best_score_ = score
+
+
+class EstimatorEpochScoring(ExtendedEpochScoring):
+    class EstimatorCallback:
+        def __init__(self, estimator, metric):
+            from sklearn.metrics import get_scorer
+            self.estimator = estimator
+            self.metric = get_scorer(metric)
+
+        def __call__(self, net, X, y) -> Tuple[float, float]:
+            Xtrain, Xvalid = X
+            ytrain, yvalid = y
+
+            X_emb = net.transform(Xtrain)
+            self.estimator.fit(X_emb, ytrain)
+            score_train = self.metric(self.estimator, X_emb, ytrain)
+
+            if(Xvalid is not None):
+                X_emb = net.transform(Xvalid)
+                score_valid = self.metric(self.estimator, X_emb, yvalid)
+            else:
+                score_valid = None
+            return score_train, score_valid
+
+    def __init__(self, estimator, metric='f1_macro', name='score', lower_is_better=False,
+                 use_caching=False, on_train=False,
+                 **kwargs):
+        self.estimator = estimator
+        self.metric = metric
+        est_cb = EstimatorEpochScoring.EstimatorCallback(estimator, metric)
+        super().__init__(est_cb, lower_is_better=lower_is_better, use_caching=use_caching, name=name, on_train=on_train,
+                         **kwargs)
+
+    def get_params(self, deep=True):
+        params = super().get_params(deep=deep)
+        del params['scoring']
+        return params
