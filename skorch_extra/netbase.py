@@ -3,8 +3,10 @@ import skorch
 import numpy as np
 import torch
 from skorch import NeuralNet
+import skorch
 import os
 from tempfile import mkdtemp
+from torch.nn import NLLLoss
 
 
 class NeuralNetBase(NeuralNet):
@@ -112,3 +114,8 @@ class NeuralNetBase(NeuralNet):
 class NeuralNetTransformer(NeuralNetBase, TransformerMixin):
     def transform(self, X):
         return self.predict_proba(X)
+
+
+class NeuralNetClassifier(NeuralNetBase, skorch.NeuralNetClassifier):
+    def __init__(self, module, criterion=NLLLoss, *args, cache_dir=mkdtemp(), init_random_state=None, **kwargs):
+        super().__init__(module, criterion=criterion, *args, cache_dir=cache_dir, init_random_state=init_random_state, **kwargs)
