@@ -1,5 +1,4 @@
 from typing import Tuple
-from sklearn import metrics
 from skorch import callbacks
 import os
 from pathlib import Path
@@ -96,7 +95,7 @@ class TensorBoardEmbeddingCallback(TensorBoardCallbackBase):
 
     def on_train_end(self, net, X=None, y=None, **kwargs):
         if(self.labels_name is not None):
-            y = [self.labels_name[a] for a in y]
+            y = [self.labels_name[int(a)] for a in y]
 
         # D_train, D_valid = net.get_split_datasets(X, y, **kwargs)
 
