@@ -1,14 +1,17 @@
 from typing import Tuple
+import skorch
 from skorch import callbacks
 import os
 from pathlib import Path
 from torch.utils.tensorboard.writer import SummaryWriter
 from datetime import datetime
+import torch
+import numpy as np
 
 
 class LoadEndState(callbacks.Callback):
     """
-    Loads weights from a checkpoint when training ends. 
+    Loads weights from a checkpoint when training ends.
     This is useful, for example, to load and use the best weights of all epochs.
     """
 
@@ -28,6 +31,9 @@ class LoadEndState(callbacks.Callback):
 
 
 class TensorBoardCallbackBase(callbacks.Callback):
+    """
+    Works with multiple folds.
+    """
     UUIDs = {}
     SUMMARY_WRITERS = {}
 
@@ -85,7 +91,7 @@ class TensorBoardCallbackBase(callbacks.Callback):
 
 class TensorBoardEmbeddingCallback(TensorBoardCallbackBase):
     """
-    Callback that saves images of embeddings of a net. 
+    Callback that saves images of embeddings of a net.
     The neural net must implement transform(.) method.
     """
 
@@ -192,3 +198,110 @@ class EstimatorEpochScoring(ExtendedEpochScoring):
         params = super().get_params(deep=deep)
         del params['scoring']
         return params
+
+
+class Ydiff:
+    """
+    Metric callback to be used with EpochScoring.
+    Measures the difference in losses, for each respective batch or sample.
+    """
+
+    def __init__(self):
+        self.last_pred = None
+
+    def __call__(self, net, X, y=None):
+        """
+        When caching enabled, y seems to be shuffled, but X is not? It seems to be a bug.
+        """
+        yp = net.predict_proba(X)
+        if(self.last_pred is not None):
+            Dists = ((self.last_pred - yp)**2).mean(axis=1)
+            ret = (Dists**0.5).mean()
+        else:
+            ret = np.nan
+        self.last_pred = yp
+
+        return ret
+
+
+def calculate_loss(criterion, dataset):
+    with torch.no_grad():
+        loss_list = []
+        for ypi, yi in dataset:
+            l = criterion(torch.FloatTensor(ypi), torch.LongTensor(yi)).numpy()
+            if(hasattr(l, 'shape') and len(l.shape) > 0):
+                loss_list.extend(l)
+            else:
+                loss_list.append(l)
+    return np.array(loss_list)
+
+
+class LossDiff:
+    """
+    Metric callback to be used with EpochScoring.
+    Measures the difference in losses, for each respective batch or sample.
+    Please, dont use caching=True with this loss callback
+    """
+
+    def __init__(self, criterion=None, random_state=None,
+                 diff_calback=lambda L1, L2: np.nan if len(L1) == 0 else np.linalg.norm(L1-L2)/len(L1),
+                 filter_callback=None, training=True) -> None:
+        self.last_losses = None
+        self.random_state = random_state
+        self.criterion = criterion
+        self.diff_calback = diff_calback
+        self.filter_callback = filter_callback
+        self.training = training
+
+    def __call__(self, net, X, y=None):
+        if(self.random_state is not None):
+            torch.random.manual_seed(self.random_state)
+            torch.cuda.random.manual_seed(self.random_state)
+            np.random.seed(self.random_state)
+        yp = torch.FloatTensor(net.predict_proba(X))
+        if(isinstance(X, torch.utils.data.Dataset)):
+            y = torch.LongTensor([X[i][1] for i in range(len(X))])
+        else:
+            y = torch.LongTensor(y)
+
+        criterion = net.criterion_ if self.criterion is None else self.criterion
+        it = net.get_iterator(skorch.dataset.Dataset(yp, y), training=self.training)
+        loss_list = calculate_loss(criterion, it)
+        if(self.last_losses is not None):
+            if(self.filter_callback is not None):
+                mask = self.filter_callback(self.last_losses, loss_list)
+                L1, L2 = self.last_losses[mask], loss_list[mask]
+            else:
+                L1, L2 = self.last_losses, loss_list
+            ret = self.diff_calback(L1, L2)
+        else:
+            ret = np.nan
+        self.last_losses = loss_list
+
+        return ret
+
+
+class HardLosses:
+    def __init__(self, hard_threshold='p95', training=True) -> None:
+        self.hard_thresdhold = hard_threshold
+        self.training = training
+
+    def __call__(self, net: skorch.NeuralNet, X, y=None):
+        yp = torch.FloatTensor(net.predict_proba(X))
+        if(isinstance(X, torch.utils.data.Dataset)):
+            y = torch.LongTensor([X[i][1] for i in range(len(X))])
+        else:
+            y = torch.LongTensor(y)
+
+        criterion = net.criterion_
+        it = net.get_iterator(skorch.dataset.Dataset(yp, y), training=self.training)
+        loss_list = calculate_loss(criterion, it)
+        if(isinstance(self.hard_thresdhold, str)):
+            p = np.percentile(loss_list, int(self.hard_thresdhold[1:3]))
+            loss_list = loss_list[loss_list >= p]
+        else:
+            loss_list = loss_list[loss_list >= self.hard_thresdhold]
+
+        return loss_list.mean()
+
+
