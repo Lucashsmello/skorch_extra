@@ -71,6 +71,8 @@ class NeuralNetBase(NeuralNet):
                 s = '%s:%s' % (str(k), str(v))
             elif(type(v) in (dict, list, tuple)):
                 s = '%s:%s' % (str(k), str(len(v)))
+            elif(isinstance(v, type)):
+                s = '%s:%s' % (str(k), v.__name__)
             else:
                 s = '%s:%s' % (str(k), v.__class__.__name__)
             m.update(s.encode('utf-8'))
