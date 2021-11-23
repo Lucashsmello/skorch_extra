@@ -27,10 +27,7 @@ class NeuralNetBase(NeuralNet):
             cache_filename = self.get_cache_filename(X, y)
             if(os.path.isfile(cache_filename)):
                 if not self.warm_start or not self.initialized_:
-                    self.initialize_virtual_params()
-                    self.initialize_criterion()
-                    self.initialize_module()
-                    self.initialized_ = True
+                    self.initialize()
                 print("loading cached neuralnet '%s'" % cache_filename)
                 self.load_params(f_params=cache_filename)
 
@@ -64,6 +61,7 @@ class NeuralNetBase(NeuralNet):
         m = hashlib.md5()
         m.update(self.__class__.__name__.encode('utf-8'))
         n = len(X)
+
         for k, v in self.get_params().items():
             if(k == 'cache_dir'):
                 continue

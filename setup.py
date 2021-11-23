@@ -2,7 +2,7 @@ from setuptools import setup
 
 modules = ['callbacks','netbase']
 setup(name='skorch_extra',
-      version='0.4',
+      version='0.5',
       description='Extra tools when using skorch',
       url='https://github.com/Lucashsmello/skorch_extra',
       author='Lucas Mello',
