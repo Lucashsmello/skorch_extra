@@ -23,8 +23,12 @@ class NeuralNetBase(NeuralNet):
         self.cache_dir = cache_dir
 
     def fit(self, X, y, **fit_params):
+        if(isinstance(X, dict)):
+            Xf = X['X']
+        else:
+            Xf = X
         if(self.cache_dir is not None):
-            cache_filename = self.get_cache_filename(X, y)
+            cache_filename = self.get_cache_filename(Xf, y)
             if(os.path.isfile(cache_filename)):
                 if not self.warm_start or not self.initialized_:
                     self.initialize()
@@ -58,9 +62,14 @@ class NeuralNetBase(NeuralNet):
     def get_cache_filename(self, X, y) -> str:
         import hashlib
 
+        if(isinstance(X, dict)):
+            Xf = X['X']
+        else:
+            Xf = X
+
         m = hashlib.md5()
         m.update(self.__class__.__name__.encode('utf-8'))
-        n = len(X)
+        n = len(Xf)
 
         for k, v in self.get_params().items():
             if(k == 'cache_dir'):
@@ -75,12 +84,14 @@ class NeuralNetBase(NeuralNet):
                 s = '%s:%s' % (str(k), v.__class__.__name__)
             m.update(s.encode('utf-8'))
         m.update(str(n).encode('utf-8'))
-        m.update(str(X[:, 0]).encode('utf-8'))
-        m.update(str(X[0]).encode('utf-8'))
-        m.update(str(X[:len(X)//2, :].mean()).encode('utf-8'))
-        m.update(str(X[:len(X)//4, :10].mean()).encode('utf-8'))
-        m.update(str(X.max()).encode('utf-8'))
-        m.update(str(X.min()).encode('utf-8'))
+        m.update(str(Xf[0]).encode('utf-8'))
+        m.update(str(Xf[1]).encode('utf-8'))
+        # m.update(str(Xf[:, 0]).encode('utf-8'))
+        # m.update(str(Xf[0]).encode('utf-8'))
+        # m.update(str(Xf[:len(Xf)//2, :].mean()).encode('utf-8'))
+        # m.update(str(Xf[:len(Xf)//4, :10].mean()).encode('utf-8'))
+        # m.update(str(Xf.max()).encode('utf-8'))
+        # m.update(str(Xf.min()).encode('utf-8'))
 
         m.update(str(y[0]).encode('utf-8'))
         m.update(str(y.max()).encode('utf-8'))
@@ -119,3 +130,4 @@ class NeuralNetTransformer(NeuralNetBase, TransformerMixin):
 class NeuralNetClassifier(NeuralNetBase, skorch.NeuralNetClassifier):
     def __init__(self, module, criterion=NLLLoss, *args, cache_dir=mkdtemp(), init_random_state=None, **kwargs):
         super().__init__(module, criterion=criterion, *args, cache_dir=cache_dir, init_random_state=init_random_state, **kwargs)
+
