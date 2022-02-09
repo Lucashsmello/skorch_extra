@@ -3,6 +3,7 @@ import skorch
 from skorch import callbacks
 import os
 from pathlib import Path
+from skorch.net import NeuralNet
 from torch.utils.tensorboard.writer import SummaryWriter
 from datetime import datetime
 import torch
@@ -163,6 +164,33 @@ class ExtendedEpochScoring(callbacks.EpochScoring):
             self.best_score_ = score
 
 
+def _get_labels(dataset):
+    if isinstance(dataset, torch.utils.data.Subset):
+        labels = _get_labels(dataset.dataset)
+        return labels[dataset.indices]
+
+    """
+    Guesses how to get the labels.
+    """
+    if hasattr(dataset, 'get_labels'):
+        return dataset.get_labels()
+    if hasattr(dataset, 'labels'):
+        return dataset.labels
+    if hasattr(dataset, 'targets'):
+        return dataset.targets
+    if hasattr(dataset, 'y'):
+        return dataset.y
+
+    import torchvision
+    if isinstance(dataset, torchvision.datasets.MNIST):
+        return dataset.train_labels.tolist()
+    if isinstance(dataset, torchvision.datasets.ImageFolder):
+        return [x[1] for x in dataset.imgs]
+    if isinstance(dataset, torchvision.datasets.DatasetFolder):
+        return dataset.samples[:][1]
+    raise NotImplementedError("BalancedDataLoader: Labels were not found!")
+
+
 class EstimatorEpochScoring(ExtendedEpochScoring):
     class EstimatorCallback:
         def __init__(self, estimator, metric):
@@ -172,7 +200,11 @@ class EstimatorEpochScoring(ExtendedEpochScoring):
 
         def __call__(self, net, X, y) -> Tuple[float, float]:
             Xtrain, Xvalid = X
-            ytrain, yvalid = y
+            if(y[0] is None):
+                ytrain = _get_labels(Xtrain)
+                yvalid = _get_labels(Xvalid)
+            else:
+                ytrain, yvalid = y
 
             X_emb = net.transform(Xtrain)
             self.estimator.fit(X_emb, ytrain)
@@ -253,7 +285,7 @@ class LossDiff:
         self.filter_callback = filter_callback
         self.training = training
 
-    def __call__(self, net, X, y=None):
+    def __call__(self, net: NeuralNet, X, y=None):
         if(self.random_state is not None):
             torch.random.manual_seed(self.random_state)
             torch.cuda.random.manual_seed(self.random_state)
@@ -303,5 +335,4 @@ class HardLosses:
             loss_list = loss_list[loss_list >= self.hard_thresdhold]
 
         return loss_list.mean()
-
 
