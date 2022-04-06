@@ -193,10 +193,11 @@ def _get_labels(dataset):
 
 class EstimatorEpochScoring(ExtendedEpochScoring):
     class EstimatorCallback:
-        def __init__(self, estimator, metric):
+        def __init__(self, estimator, metric, use_transform=True):
             from sklearn.metrics import get_scorer
             self.estimator = estimator
             self.metric = get_scorer(metric)
+            self.use_transform = use_transform
 
         def __call__(self, net, X, y) -> Tuple[float, float]:
             Xtrain, Xvalid = X
@@ -206,23 +207,29 @@ class EstimatorEpochScoring(ExtendedEpochScoring):
             else:
                 ytrain, yvalid = y
 
-            X_emb = net.transform(Xtrain)
+            if(self.use_transform):
+                X_emb = net.transform(Xtrain)
+            else:
+                X_emb = net.predict(Xtrain)
             self.estimator.fit(X_emb, ytrain)
             score_train = self.metric(self.estimator, X_emb, ytrain)
 
             if(Xvalid is not None):
-                X_emb = net.transform(Xvalid)
+                if(self.use_transform):
+                    X_emb = net.transform(Xvalid)
+                else:
+                    X_emb = net.predict(Xvalid)
                 score_valid = self.metric(self.estimator, X_emb, yvalid)
             else:
                 score_valid = None
             return score_train, score_valid
 
     def __init__(self, estimator, metric='f1_macro', name='score', lower_is_better=False,
-                 use_caching=False, on_train=False,
+                 use_caching=False, on_train=False, use_transform=True,
                  **kwargs):
         self.estimator = estimator
         self.metric = metric
-        est_cb = EstimatorEpochScoring.EstimatorCallback(estimator, metric)
+        est_cb = EstimatorEpochScoring.EstimatorCallback(estimator, metric, use_transform)
         super().__init__(est_cb, lower_is_better=lower_is_better, use_caching=use_caching, name=name, on_train=on_train,
                          **kwargs)
 
